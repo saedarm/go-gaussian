@@ -15,8 +15,8 @@ An interactive GUI application built with Go and Ebiten that solves systems of l
 ## Prerequisites
 
 - Go 1.16 or later
-- DejaVu Sans font
-
+  ### DejaVu Sans font
+[Download TTF File Here](https://www.fontsquirrel.com/fonts/download/dejavu-sans)
 ## Installation
 
 1. Clone the repository:
@@ -112,10 +112,10 @@ The application is structured into several key components:
 5. Create a new Pull Request
 
 
-## Acknowledgments
+## Ebiten Docs
 
-- Ebiten game engine
--    https://ebitengine.org/
--    https://github.com/hajimehoshi/ebiten
-- DejaVu Sans Font
-- Gaussian Elimination Algorithm
+[Official Website](https://ebitengine.org)
+[Ebiten on Github](https://github.com/hajimehoshi/ebiten)
+
+## Mathematics
+[Gaussian Elimination Algorithm](https://en.wikipedia.org/wiki/Gaussian_elimination)
