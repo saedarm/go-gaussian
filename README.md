@@ -111,12 +111,11 @@ The application is structured into several key components:
 4. Push to the branch
 5. Create a new Pull Request
 
-## License
-
-[Your chosen license]
 
 ## Acknowledgments
 
 - Ebiten game engine
-- DejaVu Sans font project
-- Gaussian Elimination algorithm
+-    https://ebitengine.org/
+-    https://github.com/hajimehoshi/ebiten
+- DejaVu Sans Font
+- Gaussian Elimination Algorithm
