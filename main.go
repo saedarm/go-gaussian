@@ -25,6 +25,7 @@ const (
 	screenWidth  = 800
 	screenHeight = 600
 	fontSize     = 20
+	displayTime  = 60 * 30 // 30 seconds at 60 FPS
 )
 
 type Matrix struct {
@@ -45,6 +46,10 @@ type Game struct {
 	font             font.Face
 	matrix           *Matrix
 	width, height    int
+	errorMsg         string
+	isRunning        bool
+	solutionTimer    int
+	keepWindowOpen   bool
 }
 
 func NewMatrix(rows, cols int) *Matrix {
@@ -213,7 +218,6 @@ func parseEquation(eq string) ([]float64, error) {
 
 	return coeffs, nil
 }
-
 func (g *Game) getContentHeight() int {
 	contentHeight := screenHeight
 
@@ -251,12 +255,34 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func (g *Game) Update() error {
+	if !g.isRunning {
+		return nil
+	}
+
+	// Handle window closing event
+	if ebiten.IsWindowBeingClosed() {
+		g.isRunning = false
+		return ebiten.Termination
+	}
+
 	// Only exit if ESC is pressed
 	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		g.isRunning = false
 		return ebiten.Termination
 	}
 
 	g.handleInput()
+
+	// Handle solution timer
+	if g.keepWindowOpen {
+		if g.solutionTimer > 0 {
+			g.solutionTimer--
+			if g.solutionTimer <= 0 {
+				// Don't close window, just stop timer
+				g.keepWindowOpen = false
+			}
+		}
+	}
 
 	// Continue animation even after solution is complete
 	if g.solving && g.currentStep < len(g.steps) {
@@ -270,7 +296,6 @@ func (g *Game) Update() error {
 		}
 	}
 
-	// Never return an error unless ESC is pressed
 	return nil
 }
 
@@ -292,12 +317,14 @@ func (g *Game) handleInput() {
 		return
 	}
 
+	// Handle numbers
 	for k := ebiten.Key0; k <= ebiten.Key9; k++ {
 		if inpututil.IsKeyJustPressed(k) {
 			g.equations[g.activeEquation] += strconv.Itoa(int(k - ebiten.Key0))
 		}
 	}
 
+	// Handle variables and operators
 	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
 		g.equations[g.activeEquation] += "x"
 	}
@@ -321,10 +348,12 @@ func (g *Game) handleInput() {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{240, 240, 240, 255})
 
+	// Draw title and instructions
 	text.Draw(screen, "Gaussian Elimination Solver", g.font, 20, 40, color.Black)
 	text.Draw(screen, "Enter equations in the form: 2x + y - z = 8", g.font, 20, 70, color.RGBA{100, 100, 100, 255})
 	text.Draw(screen, "Press SPACE to solve | ESC to exit", g.font, 20, 90, color.RGBA{100, 100, 100, 255})
 
+	// Draw input fields
 	for i := 0; i < 3; i++ {
 		y := 100 + i*60
 		ebitenutil.DrawRect(screen, 20, float64(y), 400, 40, color.RGBA{255, 255, 255, 255})
@@ -334,6 +363,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		text.Draw(screen, g.equations[i], g.font, 30, y+30, color.Black)
 	}
 
+	// Draw solution and steps
 	if g.solving || g.solutionComplete {
 		y := 320
 		for i := 0; i <= g.currentStep && i < len(g.steps); i++ {
@@ -347,23 +377,35 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			text.Draw(screen, g.solution, g.font, 30, y, color.RGBA{0, 100, 0, 255})
 		}
 	}
+
+	// Draw error message if any
+	if g.errorMsg != "" {
+		text.Draw(screen, g.errorMsg, g.font, 20, 300, color.RGBA{255, 0, 0, 255})
+	}
 }
 
 func (g *Game) solve() {
-	// Don't start a new solution if we're in the middle of one
-	if g.solving && !g.solutionComplete {
-		return
-	}
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Recovered from error in solve: %v", r)
+			g.errorMsg = "An error occurred while solving"
+			g.solving = true
+			g.solutionComplete = true
+		}
+	}()
 
 	g.matrix = NewMatrix(3, 4)
+	g.errorMsg = ""
 
-	// Validate all equations first
+	// Validate equations
 	for i := 0; i < 3; i++ {
 		if g.equations[i] == "" {
+			g.errorMsg = fmt.Sprintf("Please enter equation %d", i+1)
 			return
 		}
 		coeffs, err := parseEquation(g.equations[i])
 		if err != nil {
+			g.errorMsg = fmt.Sprintf("Error in equation %d: %s", i+1, err)
 			return
 		}
 		g.matrix.data[i] = coeffs
@@ -380,7 +422,7 @@ func (g *Game) solve() {
 	if math.Abs(g.matrix.data[0][0]) < 1e-10 ||
 		math.Abs(g.matrix.data[1][1]) < 1e-10 ||
 		math.Abs(g.matrix.data[2][2]) < 1e-10 {
-		g.solving = false
+		g.errorMsg = "No unique solution exists"
 		return
 	}
 
@@ -388,7 +430,11 @@ func (g *Game) solve() {
 	g.solution = fmt.Sprintf("x = %.2f, y = %.2f, z = %.2f",
 		g.matrix.data[0][3], g.matrix.data[1][3], g.matrix.data[2][3])
 
-	// File saving doesn't affect the window staying open
+	// Start the solution timer
+	g.solutionTimer = displayTime
+	g.keepWindowOpen = true
+
+	// Handle file operations
 	err := os.MkdirAll("solutions", 0755)
 	if err != nil {
 		log.Printf("Error creating solutions directory: %v", err)
@@ -450,6 +496,10 @@ func NewGame() *Game {
 		width:            screenWidth,
 		height:           screenHeight,
 		solutionComplete: false,
+		solving:          false,
+		isRunning:        true,
+		solutionTimer:    0,
+		keepWindowOpen:   false,
 	}
 }
 
@@ -458,10 +508,11 @@ func main() {
 	ebiten.SetWindowTitle("Gaussian Elimination Solver")
 	ebiten.SetWindowResizable(true)
 
-	if err := ebiten.RunGame(NewGame()); err != nil {
+	game := NewGame()
+	if err := ebiten.RunGame(game); err != nil {
 		if err == ebiten.Termination {
-			return // Normal termination, don't log it
+			return // Clean exit
 		}
-		log.Fatal(err)
+		log.Printf("Game error: %v", err)
 	}
 }

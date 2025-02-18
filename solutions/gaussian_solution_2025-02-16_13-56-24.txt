@@ -1,0 +1,30 @@
+Solution generated at: 2025-02-16 13:56:24
+
+Input Equations:
+Equation 1: 42x-24z=423
+Equation 2: 12x+20y=112
+Equation 3: 25x+321z=500
+
+Initial Matrix:
+[42.00 0.00 -24.00 | 423.00]
+[12.00 20.00 0.00 | 112.00]
+[25.00 0.00 321.00 | 500.00]
+
+Solution Steps:
+Starting Gaussian Elimination...
+L1 → 0.02L1
+L2 + -12.00L1 → L2
+L3 + -25.00L1 → L3
+L2 → 0.05L2
+L3 → 0.00L3
+L1 + 0.57L3 → L1
+L2 + -0.34L3 → L2
+
+Solution:
+
+Final Matrix:
+[1.00 0.00 -0.00 | 10.49]
+[-0.00 1.00 0.00 | -0.70]
+[-0.00 0.00 1.00 | 0.74]
+
+x = 10.49, y = -0.70, z = 0.74

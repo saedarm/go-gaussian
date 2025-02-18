@@ -1,0 +1,32 @@
+Solution generated at: 2025-02-16 13:46:51
+
+Input Equations:
+Equation 1: 243x-45y=22
+Equation 2: 42x+253z=2342
+Equation 3: 53x-114z=905
+
+Initial Matrix:
+[243.00 -45.00 0.00 | 22.00]
+[42.00 0.00 253.00 | 2342.00]
+[53.00 0.00 -114.00 | 905.00]
+
+Solution Steps:
+Starting Gaussian Elimination...
+L1 → 0.00L1
+L2 + -42.00L1 → L2
+L3 + -53.00L1 → L3
+L2 → 0.13L2
+L1 + 0.19L2 → L1
+L3 + -9.83L2 → L3
+L3 → -0.00L3
+L1 + -6.02L3 → L1
+L2 + -32.49L3 → L2
+
+Solution:
+
+Final Matrix:
+[1.00 0.00 -0.00 | 27.23]
+[-0.01 1.00 -0.03 | 146.39]
+[0.00 -0.00 1.00 | 4.74]
+
+x = 27.23, y = 146.39, z = 4.74
