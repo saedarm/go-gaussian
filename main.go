@@ -26,6 +26,8 @@ const (
 	screenHeight = 600
 	fontSize     = 20
 	displayTime  = 60 * 30 // 30 seconds at 60 FPS
+	minWidth     = 800
+	minHeight    = 600
 )
 
 type Matrix struct {
@@ -35,23 +37,26 @@ type Matrix struct {
 }
 
 type Game struct {
-	equations        []string
-	activeEquation   int
-	solving          bool
-	solutionComplete bool
-	solution         string
-	steps            []string
-	currentStep      int
-	stepDelay        int
-	font             font.Face
-	matrix           *Matrix
-	width, height    int
-	errorMsg         string
-	isRunning        bool
-	solutionTimer    int
-	keepWindowOpen   bool
+	equations           []string
+	activeEquation      int
+	solving             bool
+	solutionComplete    bool
+	solution            string
+	steps               []string
+	currentStep         int
+	stepDelay           int
+	font                font.Face
+	matrix              *Matrix
+	width, height       int
+	errorMsg            string
+	isRunning           bool
+	solutionTimer       int
+	keepWindowOpen      bool
+	ShowExitPrompt      bool
+	solutionDisplayDone bool
 }
 
+// Matrix operations
 func NewMatrix(rows, cols int) *Matrix {
 	data := make([][]float64, rows)
 	for i := range data {
@@ -160,6 +165,7 @@ func (m *Matrix) GaussianElimination() []string {
 	return steps
 }
 
+// Equation parsing
 func parseEquation(eq string) ([]float64, error) {
 	eq = strings.ToLower(strings.ReplaceAll(eq, " ", ""))
 	coeffs := make([]float64, 4)
@@ -218,8 +224,10 @@ func parseEquation(eq string) ([]float64, error) {
 
 	return coeffs, nil
 }
+
+// Game methods
 func (g *Game) getContentHeight() int {
-	contentHeight := screenHeight
+	contentHeight := minHeight // Start with minimum height
 
 	if g.solving || g.solutionComplete {
 		numVisibleSteps := g.currentStep + 1
@@ -227,13 +235,22 @@ func (g *Game) getContentHeight() int {
 			numVisibleSteps = len(g.steps)
 		}
 
-		contentHeight = 320 + (numVisibleSteps * 45)
+		height := 320 + (numVisibleSteps * 45)
 
 		if g.solution != "" {
-			contentHeight += 80
+			height += 80
 		}
 
-		contentHeight += 100
+		height += 100
+
+		if height > contentHeight {
+			contentHeight = height
+		}
+	}
+
+	// Ensure we never return less than minHeight
+	if contentHeight < minHeight {
+		contentHeight = minHeight
 	}
 
 	return contentHeight
@@ -242,18 +259,23 @@ func (g *Game) getContentHeight() int {
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	contentHeight := g.getContentHeight()
 
-	if contentHeight > g.height {
-		g.height = contentHeight
-		ebiten.SetWindowSize(screenWidth, contentHeight)
+	// Ensure minimum dimensions
+	width := minWidth
+	height := contentHeight
+
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
 	}
 
-	if g.solutionComplete && g.height < contentHeight {
-		g.height = contentHeight
-	}
+	// Update game dimensions
+	g.width = width
+	g.height = height
 
-	return g.width, g.height
+	return width, height
 }
-
 func (g *Game) Update() error {
 	if !g.isRunning {
 		return nil
@@ -261,12 +283,17 @@ func (g *Game) Update() error {
 
 	// Handle window closing event
 	if ebiten.IsWindowBeingClosed() {
-		g.isRunning = false
-		return ebiten.Termination
+		if g.solutionDisplayDone {
+			g.ShowExitPrompt = true
+			g.isRunning = false
+			return ebiten.Termination
+		}
+		ebiten.SetWindowClosingHandled(true)
+		return nil
 	}
 
-	// Only exit if ESC is pressed
-	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+	// Only exit if ESC is pressed and solution is complete
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) && g.solutionDisplayDone {
 		g.isRunning = false
 		return ebiten.Termination
 	}
@@ -278,7 +305,7 @@ func (g *Game) Update() error {
 		if g.solutionTimer > 0 {
 			g.solutionTimer--
 			if g.solutionTimer <= 0 {
-				// Don't close window, just stop timer
+				g.solutionDisplayDone = true
 				g.keepWindowOpen = false
 			}
 		}
@@ -317,14 +344,12 @@ func (g *Game) handleInput() {
 		return
 	}
 
-	// Handle numbers
 	for k := ebiten.Key0; k <= ebiten.Key9; k++ {
 		if inpututil.IsKeyJustPressed(k) {
 			g.equations[g.activeEquation] += strconv.Itoa(int(k - ebiten.Key0))
 		}
 	}
 
-	// Handle variables and operators
 	if inpututil.IsKeyJustPressed(ebiten.KeyX) {
 		g.equations[g.activeEquation] += "x"
 	}
@@ -346,6 +371,10 @@ func (g *Game) handleInput() {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	// Get actual screen dimensions
+	actualWidth, actualHeight := screen.Size()
+
+	// Fill background
 	screen.Fill(color.RGBA{240, 240, 240, 255})
 
 	// Draw title and instructions
@@ -353,7 +382,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	text.Draw(screen, "Enter equations in the form: 2x + y - z = 8", g.font, 20, 70, color.RGBA{100, 100, 100, 255})
 	text.Draw(screen, "Press SPACE to solve | ESC to exit", g.font, 20, 90, color.RGBA{100, 100, 100, 255})
 
-	// Draw input fields
+	// Draw equation input fields
 	for i := 0; i < 3; i++ {
 		y := 100 + i*60
 		ebitenutil.DrawRect(screen, 20, float64(y), 400, 40, color.RGBA{255, 255, 255, 255})
@@ -363,17 +392,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		text.Draw(screen, g.equations[i], g.font, 30, y+30, color.Black)
 	}
 
-	// Draw solution and steps
+	// Draw solution steps
 	if g.solving || g.solutionComplete {
 		y := 320
 		for i := 0; i <= g.currentStep && i < len(g.steps); i++ {
-			ebitenutil.DrawRect(screen, 20, float64(y-25), float64(g.width-60), 35, color.RGBA{255, 255, 255, 255})
+			ebitenutil.DrawRect(screen, 20, float64(y-25), float64(actualWidth-60), 35, color.RGBA{255, 255, 255, 255})
 			text.Draw(screen, g.steps[i], g.font, 30, y, color.Black)
 			y += 45
 		}
 
 		if g.solution != "" {
-			ebitenutil.DrawRect(screen, 20, float64(y-25), float64(g.width-60), 35, color.RGBA{230, 255, 230, 255})
+			ebitenutil.DrawRect(screen, 20, float64(y-25), float64(actualWidth-60), 35, color.RGBA{230, 255, 230, 255})
 			text.Draw(screen, g.solution, g.font, 30, y, color.RGBA{0, 100, 0, 255})
 		}
 	}
@@ -381,6 +410,30 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Draw error message if any
 	if g.errorMsg != "" {
 		text.Draw(screen, g.errorMsg, g.font, 20, 300, color.RGBA{255, 0, 0, 255})
+	}
+
+	// Draw exit prompt if showing
+	if g.ShowExitPrompt {
+		// Create overlay with safe dimensions
+		overlayWidth := actualWidth
+		if overlayWidth < 1 {
+			overlayWidth = 1
+		}
+		overlayHeight := actualHeight
+		if overlayHeight < 1 {
+			overlayHeight = 1
+		}
+
+		overlay := ebiten.NewImage(overlayWidth, overlayHeight)
+		overlay.Fill(color.RGBA{0, 0, 0, 128})
+		opt := &ebiten.DrawImageOptions{}
+		screen.DrawImage(overlay, opt)
+
+		msg := "Solution complete. Press ESC to exit."
+		bound := text.BoundString(g.font, msg)
+		x := (overlayWidth - bound.Dx()) / 2
+		y := (overlayHeight - bound.Dy()) / 2
+		text.Draw(screen, msg, g.font, x, y, color.White)
 	}
 }
 
@@ -415,6 +468,8 @@ func (g *Game) solve() {
 	g.stepDelay = 0
 	g.solving = true
 	g.solutionComplete = false
+	g.solutionDisplayDone = false
+	g.ShowExitPrompt = false
 
 	initialMatrix := g.matrix.GetMatrixString()
 	g.steps = g.matrix.GaussianElimination()
@@ -491,27 +546,30 @@ func NewGame() *Game {
 	}
 
 	return &Game{
-		equations:        make([]string, 3),
-		font:             font,
-		width:            screenWidth,
-		height:           screenHeight,
-		solutionComplete: false,
-		solving:          false,
-		isRunning:        true,
-		solutionTimer:    0,
-		keepWindowOpen:   false,
+		equations:           make([]string, 3),
+		font:                font,
+		width:               minWidth,
+		height:              minHeight,
+		solutionComplete:    false,
+		solving:             false,
+		isRunning:           true,
+		solutionTimer:       0,
+		keepWindowOpen:      false,
+		ShowExitPrompt:      false,
+		solutionDisplayDone: false,
 	}
 }
 
 func main() {
-	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowSize(minWidth, minHeight)
 	ebiten.SetWindowTitle("Gaussian Elimination Solver")
 	ebiten.SetWindowResizable(true)
+	ebiten.SetWindowClosingHandled(true)
 
 	game := NewGame()
 	if err := ebiten.RunGame(game); err != nil {
 		if err == ebiten.Termination {
-			return // Clean exit
+			os.Exit(0) // Clean exit
 		}
 		log.Printf("Game error: %v", err)
 	}
