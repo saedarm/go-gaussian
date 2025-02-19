@@ -64,6 +64,7 @@ go build -o gaussian-solver
    - Each equation must contain one equals sign
 
 3. Controls:
+   - Use "/" for addition !!
    - Tab/Enter: Move between input fields
    - Mouse: Click input fields or scroll solution
    - Solve button: Start calculation
