@@ -30,6 +30,15 @@ const (
 	minHeight    = 600
 )
 
+type Button struct {
+	x, y, w, h int
+	text       string
+}
+
+func (b *Button) Contains(x, y int) bool {
+	return x >= b.x && x < b.x+b.w && y >= b.y && y < b.y+b.h
+}
+
 type Matrix struct {
 	rows int
 	cols int
@@ -54,9 +63,9 @@ type Game struct {
 	keepWindowOpen      bool
 	ShowExitPrompt      bool
 	solutionDisplayDone bool
+	closeButton         Button
 }
 
-// Matrix operations
 func NewMatrix(rows, cols int) *Matrix {
 	data := make([][]float64, rows)
 	for i := range data {
@@ -69,6 +78,7 @@ func NewMatrix(rows, cols int) *Matrix {
 	}
 }
 
+// Matrix operations
 func (m *Matrix) SwapRows(row1, row2 int) {
 	m.data[row1], m.data[row2] = m.data[row2], m.data[row1]
 }
@@ -164,8 +174,6 @@ func (m *Matrix) GaussianElimination() []string {
 
 	return steps
 }
-
-// Equation parsing
 func parseEquation(eq string) ([]float64, error) {
 	eq = strings.ToLower(strings.ReplaceAll(eq, " ", ""))
 	coeffs := make([]float64, 4)
@@ -225,7 +233,6 @@ func parseEquation(eq string) ([]float64, error) {
 	return coeffs, nil
 }
 
-// Game methods
 func (g *Game) getContentHeight() int {
 	contentHeight := minHeight // Start with minimum height
 
@@ -248,7 +255,6 @@ func (g *Game) getContentHeight() int {
 		}
 	}
 
-	// Ensure we never return less than minHeight
 	if contentHeight < minHeight {
 		contentHeight = minHeight
 	}
@@ -259,7 +265,6 @@ func (g *Game) getContentHeight() int {
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	contentHeight := g.getContentHeight()
 
-	// Ensure minimum dimensions
 	width := minWidth
 	height := contentHeight
 
@@ -270,15 +275,24 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 		height = 1
 	}
 
-	// Update game dimensions
 	g.width = width
 	g.height = height
 
 	return width, height
 }
+
 func (g *Game) Update() error {
 	if !g.isRunning {
 		return nil
+	}
+
+	// Handle mouse clicks for close button
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		if g.closeButton.Contains(x, y) {
+			g.isRunning = false
+			return ebiten.Termination
+		}
 	}
 
 	// Handle window closing event
@@ -369,7 +383,6 @@ func (g *Game) handleInput() {
 		g.equations[g.activeEquation] += "+"
 	}
 }
-
 func (g *Game) Draw(screen *ebiten.Image) {
 	// Get actual screen dimensions
 	actualWidth, actualHeight := screen.Size()
@@ -381,6 +394,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	text.Draw(screen, "Gaussian Elimination Solver", g.font, 20, 40, color.Black)
 	text.Draw(screen, "Enter equations in the form: 2x + y - z = 8", g.font, 20, 70, color.RGBA{100, 100, 100, 255})
 	text.Draw(screen, "Press SPACE to solve | ESC to exit", g.font, 20, 90, color.RGBA{100, 100, 100, 255})
+
+	// Draw close button
+	ebitenutil.DrawRect(screen, float64(g.closeButton.x), float64(g.closeButton.y),
+		float64(g.closeButton.w), float64(g.closeButton.h),
+		color.RGBA{200, 50, 50, 255}) // Red button
+	bound := text.BoundString(g.font, g.closeButton.text)
+	x := g.closeButton.x + (g.closeButton.w-bound.Dx())/2
+	y := g.closeButton.y + (g.closeButton.h+bound.Dy())/2
+	text.Draw(screen, g.closeButton.text, g.font, x, y, color.White)
 
 	// Draw equation input fields
 	for i := 0; i < 3; i++ {
@@ -414,7 +436,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	// Draw exit prompt if showing
 	if g.ShowExitPrompt {
-		// Create overlay with safe dimensions
 		overlayWidth := actualWidth
 		if overlayWidth < 1 {
 			overlayWidth = 1
@@ -450,7 +471,6 @@ func (g *Game) solve() {
 	g.matrix = NewMatrix(3, 4)
 	g.errorMsg = ""
 
-	// Validate equations
 	for i := 0; i < 3; i++ {
 		if g.equations[i] == "" {
 			g.errorMsg = fmt.Sprintf("Please enter equation %d", i+1)
@@ -557,6 +577,13 @@ func NewGame() *Game {
 		keepWindowOpen:      false,
 		ShowExitPrompt:      false,
 		solutionDisplayDone: false,
+		closeButton: Button{
+			x:    screenWidth - 120, // Position in top right
+			y:    20,
+			w:    100,
+			h:    40,
+			text: "Close",
+		},
 	}
 }
 
